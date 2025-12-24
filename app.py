@@ -1299,6 +1299,19 @@ def health():
     return jsonify({'status': 'ok', 'service': 'bigoil-backend'})
 
 
+@app.route('/debug-env', methods=['GET'])
+def debug_env():
+    """Debug endpoint to check environment variables (remove in production)"""
+    return jsonify({
+        'supabase_url_set': bool(SUPABASE_URL),
+        'supabase_url_length': len(SUPABASE_URL) if SUPABASE_URL else 0,
+        'supabase_url_preview': SUPABASE_URL[:30] + '...' if SUPABASE_URL and len(SUPABASE_URL) > 30 else SUPABASE_URL,
+        'supabase_key_set': bool(SUPABASE_KEY),
+        'supabase_key_length': len(SUPABASE_KEY) if SUPABASE_KEY else 0,
+        'rest_url': SUPABASE_REST_URL[:40] + '...' if SUPABASE_REST_URL and len(SUPABASE_REST_URL) > 40 else SUPABASE_REST_URL
+    })
+
+
 @app.route('/', methods=['GET'])
 def index():
     return jsonify({
