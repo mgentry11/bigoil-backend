@@ -1302,13 +1302,21 @@ def health():
 @app.route('/debug-env', methods=['GET'])
 def debug_env():
     """Debug endpoint to check environment variables (remove in production)"""
+    # Read fresh from os.environ to bypass any caching
+    fresh_url = os.environ.get('SUPABASE_URL', '')
+    fresh_key = os.environ.get('SUPABASE_KEY', '')
+
+    # Get all env var names (not values) for debugging
+    all_env_names = sorted([k for k in os.environ.keys()])
+
     return jsonify({
-        'supabase_url_set': bool(SUPABASE_URL),
-        'supabase_url_length': len(SUPABASE_URL) if SUPABASE_URL else 0,
-        'supabase_url_preview': SUPABASE_URL[:30] + '...' if SUPABASE_URL and len(SUPABASE_URL) > 30 else SUPABASE_URL,
-        'supabase_key_set': bool(SUPABASE_KEY),
-        'supabase_key_length': len(SUPABASE_KEY) if SUPABASE_KEY else 0,
-        'rest_url': SUPABASE_REST_URL[:40] + '...' if SUPABASE_REST_URL and len(SUPABASE_REST_URL) > 40 else SUPABASE_REST_URL
+        'supabase_url_set': bool(fresh_url),
+        'supabase_url_length': len(fresh_url) if fresh_url else 0,
+        'supabase_url_preview': fresh_url[:30] + '...' if fresh_url and len(fresh_url) > 30 else fresh_url,
+        'supabase_key_set': bool(fresh_key),
+        'supabase_key_length': len(fresh_key) if fresh_key else 0,
+        'all_env_var_names': all_env_names,
+        'total_env_vars': len(all_env_names)
     })
 
 
