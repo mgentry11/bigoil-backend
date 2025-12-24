@@ -602,8 +602,697 @@ def parse_linkedin_pdf():
 
 
 # =============================================
+# RESUME FRAUD DETECTION API
+# =============================================
+
+@app.route('/api/analyze-resume-fraud', methods=['POST', 'OPTIONS'])
+def analyze_resume_fraud():
+    """Analyze resume for potential fraud indicators using AI"""
+    if request.method == 'OPTIONS':
+        return '', 204
+
+    try:
+        data = request.get_json()
+        candidate = data.get('candidate', {})
+
+        if not candidate:
+            return jsonify({'error': 'candidate data required'}), 400
+
+        # Use AI for fraud detection if available
+        if OPENAI_API_KEY:
+            import openai
+            client = openai.OpenAI(api_key=OPENAI_API_KEY)
+
+            prompt = f"""Analyze this resume/profile for potential fraud indicators.
+
+CANDIDATE DATA:
+Name: {candidate.get('name', 'Unknown')}
+Headline: {candidate.get('headline', '')}
+Location: {candidate.get('location', '')}
+About: {candidate.get('about', '')}
+Skills: {', '.join(candidate.get('skills', []))}
+Experience: {json.dumps(candidate.get('experience', []))}
+Education: {json.dumps(candidate.get('education', []))}
+
+Analyze for:
+1. Timeline inconsistencies (overlapping jobs, impossible career progression)
+2. Exaggerated or unverifiable claims
+3. Generic buzzword-heavy content suggesting AI generation
+4. Missing critical information
+5. Suspicious patterns in experience or education
+
+Return JSON only:
+{{
+    "status": "<verified/suspicious/flagged>",
+    "score": <0-100 confidence score>,
+    "flags": ["list of specific concerns"],
+    "summary": "brief assessment"
+}}"""
+
+            try:
+                response = client.chat.completions.create(
+                    model="gpt-4o",
+                    messages=[
+                        {"role": "system", "content": "You are a fraud detection expert. Return valid JSON only."},
+                        {"role": "user", "content": prompt}
+                    ],
+                    temperature=0.2,
+                    max_tokens=1000
+                )
+
+                result_text = response.choices[0].message.content.strip()
+                if result_text.startswith('```'):
+                    result_text = result_text.split('```')[1]
+                    if result_text.startswith('json'):
+                        result_text = result_text[4:]
+                if result_text.endswith('```'):
+                    result_text = result_text[:-3]
+
+                return jsonify(json.loads(result_text.strip()))
+
+            except Exception as e:
+                print(f"AI fraud analysis error: {e}")
+
+        # Fallback to basic rule-based detection
+        return jsonify(perform_basic_fraud_check(candidate))
+
+    except Exception as e:
+        print(f"Fraud analysis error: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+def perform_basic_fraud_check(candidate):
+    """Basic rule-based fraud detection"""
+    flags = []
+    risk_score = 0
+
+    skills = candidate.get('skills', [])
+    experience = candidate.get('experience', [])
+    education = candidate.get('education', [])
+    about = candidate.get('about', '')
+
+    if len(skills) > 30:
+        flags.append(f"Excessive skills listed ({len(skills)})")
+        risk_score += 20
+
+    if len(experience) == 0:
+        flags.append("No work experience listed")
+        risk_score += 15
+
+    if len(education) == 0:
+        flags.append("No education listed")
+        risk_score += 5
+
+    if not candidate.get('location'):
+        flags.append("No location provided")
+        risk_score += 5
+
+    generic_phrases = ['results-driven', 'team player', 'passionate about', 'proven track record']
+    generic_count = sum(1 for p in generic_phrases if p in about.lower())
+    if generic_count >= 3:
+        flags.append("About section uses many generic buzzwords")
+        risk_score += 10
+
+    status = 'verified'
+    if risk_score >= 30:
+        status = 'flagged'
+    elif risk_score >= 15:
+        status = 'suspicious'
+
+    return {
+        'status': status,
+        'score': 100 - risk_score,
+        'flags': flags
+    }
+
+
+# =============================================
+# CANDIDATE FIT ANALYSIS API
+# =============================================
+
+@app.route('/api/analyze-candidate-fit', methods=['POST', 'OPTIONS'])
+def analyze_candidate_fit():
+    """Analyze how well a candidate fits a job description"""
+    if request.method == 'OPTIONS':
+        return '', 204
+
+    try:
+        data = request.get_json()
+        candidate = data.get('candidate', {})
+        job = data.get('job', {})
+
+        if not candidate or not job:
+            return jsonify({'error': 'candidate and job data required'}), 400
+
+        # Use AI for fit analysis if available
+        if OPENAI_API_KEY:
+            import openai
+            client = openai.OpenAI(api_key=OPENAI_API_KEY)
+
+            prompt = f"""Analyze how well this candidate fits the job position.
+
+JOB:
+Title: {job.get('title', '')}
+Company: {job.get('company', '')}
+Description: {job.get('description', '')}
+Requirements: {', '.join(job.get('requirements', []))}
+
+CANDIDATE:
+Name: {candidate.get('name', '')}
+Headline: {candidate.get('headline', '')}
+Skills: {', '.join(candidate.get('skills', []))}
+Experience: {json.dumps(candidate.get('experience', []))}
+Education: {json.dumps(candidate.get('education', []))}
+About: {candidate.get('about', '')}
+
+Return JSON only:
+{{
+    "overallScore": <0-100>,
+    "skillsScore": <0-100>,
+    "experienceScore": <0-100>,
+    "educationScore": <0-100>,
+    "matchedSkills": ["skill1", "skill2"],
+    "missingSkills": ["skill1", "skill2"],
+    "recommendations": ["rec1", "rec2"],
+    "analyzedAt": "{__import__('datetime').datetime.now().isoformat()}"
+}}"""
+
+            try:
+                response = client.chat.completions.create(
+                    model="gpt-4o",
+                    messages=[
+                        {"role": "system", "content": "You are an expert HR analyst. Return valid JSON only."},
+                        {"role": "user", "content": prompt}
+                    ],
+                    temperature=0.3,
+                    max_tokens=1500
+                )
+
+                result_text = response.choices[0].message.content.strip()
+                if result_text.startswith('```'):
+                    result_text = result_text.split('```')[1]
+                    if result_text.startswith('json'):
+                        result_text = result_text[4:]
+                if result_text.endswith('```'):
+                    result_text = result_text[:-3]
+
+                return jsonify(json.loads(result_text.strip()))
+
+            except Exception as e:
+                print(f"AI fit analysis error: {e}")
+
+        # Fallback to basic keyword matching
+        return jsonify(perform_basic_fit_analysis(candidate, job))
+
+    except Exception as e:
+        print(f"Fit analysis error: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+def perform_basic_fit_analysis(candidate, job):
+    """Basic keyword matching for fit analysis"""
+    from datetime import datetime
+
+    job_text = (job.get('description', '') + ' ' + ' '.join(job.get('requirements', []))).lower()
+    candidate_text = (
+        candidate.get('about', '') + ' ' +
+        ' '.join(candidate.get('skills', [])) + ' ' +
+        ' '.join([e.get('title', '') + ' ' + e.get('company', '') for e in candidate.get('experience', [])])
+    ).lower()
+
+    keywords = [w for w in job_text.split() if len(w) > 3]
+    unique_keywords = list(set(keywords))
+
+    matches = 0
+    matched_skills = []
+    missing_skills = []
+
+    for keyword in unique_keywords:
+        if keyword in candidate_text:
+            matches += 1
+            if any(keyword in s.lower() for s in candidate.get('skills', [])):
+                matched_skills.append(keyword)
+        else:
+            if any(keyword in r.lower() for r in job.get('requirements', [])):
+                missing_skills.append(keyword)
+
+    fit_score = min(100, int((matches / max(len(unique_keywords), 1)) * 150))
+    skills_score = min(100, int(len(matched_skills) / max(len(candidate.get('skills', [])), 1) * 100))
+    exp_score = 70 if candidate.get('experience') else 30
+    edu_score = 70 if candidate.get('education') else 40
+
+    recommendations = []
+    if fit_score >= 80:
+        recommendations.append('Strong candidate - consider for immediate interview')
+    elif fit_score >= 60:
+        recommendations.append('Good potential - may need skills assessment')
+    else:
+        recommendations.append('May not be the best fit - review carefully')
+
+    return {
+        'overallScore': fit_score,
+        'skillsScore': skills_score,
+        'experienceScore': exp_score,
+        'educationScore': edu_score,
+        'matchedSkills': list(set(matched_skills))[:10],
+        'missingSkills': list(set(missing_skills))[:5],
+        'recommendations': recommendations,
+        'analyzedAt': datetime.now().isoformat()
+    }
+
+
+# =============================================
 # HEALTH CHECK
 # =============================================
+
+# =============================================
+# VOICEDAY - NAGGING APP API
+# =============================================
+
+@app.route('/api/voiceday/register', methods=['POST', 'OPTIONS'])
+def voiceday_register():
+    """Register or update a VoiceDay user"""
+    if request.method == 'OPTIONS':
+        return '', 204
+
+    try:
+        data = request.get_json()
+        device_id = data.get('device_id')
+        name = data.get('name', 'Anonymous')
+        phone = data.get('phone', '')
+        push_token = data.get('push_token', '')
+
+        if not device_id:
+            return jsonify({'error': 'device_id required'}), 400
+
+        # Check if user exists
+        check_response = requests.get(
+            f"{SUPABASE_REST_URL}/voiceday_users",
+            headers={
+                'apikey': SUPABASE_KEY,
+                'Authorization': f'Bearer {SUPABASE_KEY}'
+            },
+            params={'device_id': f'eq.{device_id}'}
+        )
+
+        user_data = {
+            'device_id': device_id,
+            'name': name,
+            'phone': phone,
+            'push_token': push_token
+        }
+
+        if check_response.ok and check_response.json():
+            # Update existing user
+            response = requests.patch(
+                f"{SUPABASE_REST_URL}/voiceday_users",
+                headers={
+                    'apikey': SUPABASE_KEY,
+                    'Authorization': f'Bearer {SUPABASE_KEY}',
+                    'Content-Type': 'application/json',
+                    'Prefer': 'return=representation'
+                },
+                params={'device_id': f'eq.{device_id}'},
+                json=user_data
+            )
+        else:
+            # Create new user
+            response = requests.post(
+                f"{SUPABASE_REST_URL}/voiceday_users",
+                headers={
+                    'apikey': SUPABASE_KEY,
+                    'Authorization': f'Bearer {SUPABASE_KEY}',
+                    'Content-Type': 'application/json',
+                    'Prefer': 'return=representation'
+                },
+                json=user_data
+            )
+
+        if response.ok:
+            return jsonify(response.json()[0] if isinstance(response.json(), list) else response.json())
+        return jsonify({'error': 'Registration failed'}), 500
+
+    except Exception as e:
+        print(f"VoiceDay register error: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/voiceday/connections', methods=['GET', 'POST', 'OPTIONS'])
+def voiceday_connections():
+    """Manage VoiceDay connections (family/friends)"""
+    if request.method == 'OPTIONS':
+        return '', 204
+
+    try:
+        if request.method == 'GET':
+            device_id = request.args.get('device_id')
+            if not device_id:
+                return jsonify({'error': 'device_id required'}), 400
+
+            response = requests.get(
+                f"{SUPABASE_REST_URL}/voiceday_connections",
+                headers={
+                    'apikey': SUPABASE_KEY,
+                    'Authorization': f'Bearer {SUPABASE_KEY}'
+                },
+                params={
+                    'or': f'(owner_device_id.eq.{device_id},connected_device_id.eq.{device_id})',
+                    'order': 'created_at.desc'
+                }
+            )
+            return jsonify(response.json() if response.ok else [])
+
+        elif request.method == 'POST':
+            data = request.get_json()
+            owner_device_id = data.get('owner_device_id')
+            connected_phone = data.get('connected_phone')
+            relationship = data.get('relationship', 'Friend')
+            nickname = data.get('nickname', '')
+
+            if not owner_device_id or not connected_phone:
+                return jsonify({'error': 'owner_device_id and connected_phone required'}), 400
+
+            # Look up connected user by phone
+            user_response = requests.get(
+                f"{SUPABASE_REST_URL}/voiceday_users",
+                headers={
+                    'apikey': SUPABASE_KEY,
+                    'Authorization': f'Bearer {SUPABASE_KEY}'
+                },
+                params={'phone': f'eq.{connected_phone}'}
+            )
+
+            connected_device_id = None
+            if user_response.ok and user_response.json():
+                connected_device_id = user_response.json()[0].get('device_id')
+
+            response = requests.post(
+                f"{SUPABASE_REST_URL}/voiceday_connections",
+                headers={
+                    'apikey': SUPABASE_KEY,
+                    'Authorization': f'Bearer {SUPABASE_KEY}',
+                    'Content-Type': 'application/json',
+                    'Prefer': 'return=representation'
+                },
+                json={
+                    'owner_device_id': owner_device_id,
+                    'connected_device_id': connected_device_id,
+                    'connected_phone': connected_phone,
+                    'relationship': relationship,
+                    'nickname': nickname
+                }
+            )
+
+            if response.ok:
+                return jsonify(response.json()[0])
+            return jsonify({'error': 'Failed to create connection'}), 500
+
+    except Exception as e:
+        print(f"VoiceDay connections error: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/voiceday/connections/<connection_id>', methods=['DELETE', 'OPTIONS'])
+def voiceday_delete_connection(connection_id):
+    """Delete a connection"""
+    if request.method == 'OPTIONS':
+        return '', 204
+
+    try:
+        response = requests.delete(
+            f"{SUPABASE_REST_URL}/voiceday_connections",
+            headers={
+                'apikey': SUPABASE_KEY,
+                'Authorization': f'Bearer {SUPABASE_KEY}'
+            },
+            params={'id': f'eq.{connection_id}'}
+        )
+        return jsonify({'success': True})
+
+    except Exception as e:
+        print(f"VoiceDay delete connection error: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/voiceday/shared-tasks', methods=['GET', 'POST', 'OPTIONS'])
+def voiceday_shared_tasks():
+    """Manage shared tasks between users"""
+    if request.method == 'OPTIONS':
+        return '', 204
+
+    try:
+        if request.method == 'GET':
+            device_id = request.args.get('device_id')
+            if not device_id:
+                return jsonify({'error': 'device_id required'}), 400
+
+            response = requests.get(
+                f"{SUPABASE_REST_URL}/voiceday_shared_tasks",
+                headers={
+                    'apikey': SUPABASE_KEY,
+                    'Authorization': f'Bearer {SUPABASE_KEY}'
+                },
+                params={
+                    'or': f'(owner_device_id.eq.{device_id},assigned_device_id.eq.{device_id})',
+                    'order': 'created_at.desc'
+                }
+            )
+            return jsonify(response.json() if response.ok else [])
+
+        elif request.method == 'POST':
+            data = request.get_json()
+
+            response = requests.post(
+                f"{SUPABASE_REST_URL}/voiceday_shared_tasks",
+                headers={
+                    'apikey': SUPABASE_KEY,
+                    'Authorization': f'Bearer {SUPABASE_KEY}',
+                    'Content-Type': 'application/json',
+                    'Prefer': 'return=representation'
+                },
+                json={
+                    'owner_device_id': data.get('owner_device_id'),
+                    'assigned_device_id': data.get('assigned_device_id'),
+                    'assigned_phone': data.get('assigned_phone'),
+                    'title': data.get('title'),
+                    'deadline': data.get('deadline'),
+                    'priority': data.get('priority', 'medium'),
+                    'nag_interval_minutes': data.get('nag_interval_minutes', 15)
+                }
+            )
+
+            if response.ok:
+                return jsonify(response.json()[0])
+            return jsonify({'error': 'Failed to create shared task'}), 500
+
+    except Exception as e:
+        print(f"VoiceDay shared tasks error: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/voiceday/shared-tasks/<task_id>', methods=['PATCH', 'DELETE', 'OPTIONS'])
+def voiceday_update_shared_task(task_id):
+    """Update or delete a shared task"""
+    if request.method == 'OPTIONS':
+        return '', 204
+
+    try:
+        if request.method == 'PATCH':
+            data = request.get_json()
+            response = requests.patch(
+                f"{SUPABASE_REST_URL}/voiceday_shared_tasks",
+                headers={
+                    'apikey': SUPABASE_KEY,
+                    'Authorization': f'Bearer {SUPABASE_KEY}',
+                    'Content-Type': 'application/json',
+                    'Prefer': 'return=representation'
+                },
+                params={'id': f'eq.{task_id}'},
+                json=data
+            )
+            if response.ok:
+                return jsonify(response.json()[0])
+            return jsonify({'error': 'Failed to update task'}), 500
+
+        elif request.method == 'DELETE':
+            response = requests.delete(
+                f"{SUPABASE_REST_URL}/voiceday_shared_tasks",
+                headers={
+                    'apikey': SUPABASE_KEY,
+                    'Authorization': f'Bearer {SUPABASE_KEY}'
+                },
+                params={'id': f'eq.{task_id}'}
+            )
+            return jsonify({'success': True})
+
+    except Exception as e:
+        print(f"VoiceDay update task error: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/voiceday/nag', methods=['POST', 'OPTIONS'])
+def voiceday_send_nag():
+    """Send a nag message to a user"""
+    if request.method == 'OPTIONS':
+        return '', 204
+
+    try:
+        data = request.get_json()
+        from_device_id = data.get('from_device_id')
+        to_device_id = data.get('to_device_id')
+        to_phone = data.get('to_phone')
+        task_id = data.get('task_id')
+        message = data.get('message', 'Time to get your task done!')
+
+        if not from_device_id or (not to_device_id and not to_phone):
+            return jsonify({'error': 'from_device_id and (to_device_id or to_phone) required'}), 400
+
+        # Store nag in database
+        nag_response = requests.post(
+            f"{SUPABASE_REST_URL}/voiceday_nags",
+            headers={
+                'apikey': SUPABASE_KEY,
+                'Authorization': f'Bearer {SUPABASE_KEY}',
+                'Content-Type': 'application/json',
+                'Prefer': 'return=representation'
+            },
+            json={
+                'from_device_id': from_device_id,
+                'to_device_id': to_device_id,
+                'to_phone': to_phone,
+                'task_id': task_id,
+                'message': message
+            }
+        )
+
+        # If recipient has the app and a push token, send push notification
+        if to_device_id:
+            user_response = requests.get(
+                f"{SUPABASE_REST_URL}/voiceday_users",
+                headers={
+                    'apikey': SUPABASE_KEY,
+                    'Authorization': f'Bearer {SUPABASE_KEY}'
+                },
+                params={'device_id': f'eq.{to_device_id}'}
+            )
+
+            if user_response.ok and user_response.json():
+                push_token = user_response.json()[0].get('push_token')
+                if push_token:
+                    # TODO: Implement push notification via APNs
+                    pass
+
+        result = {
+            'success': True,
+            'nag_id': nag_response.json()[0].get('id') if nag_response.ok else None,
+            'delivery_method': 'app' if to_device_id else 'sms_required'
+        }
+
+        return jsonify(result)
+
+    except Exception as e:
+        print(f"VoiceDay nag error: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/voiceday/nags', methods=['GET', 'OPTIONS'])
+def voiceday_get_nags():
+    """Get nags for a user"""
+    if request.method == 'OPTIONS':
+        return '', 204
+
+    try:
+        device_id = request.args.get('device_id')
+        if not device_id:
+            return jsonify({'error': 'device_id required'}), 400
+
+        response = requests.get(
+            f"{SUPABASE_REST_URL}/voiceday_nags",
+            headers={
+                'apikey': SUPABASE_KEY,
+                'Authorization': f'Bearer {SUPABASE_KEY}'
+            },
+            params={
+                'or': f'(from_device_id.eq.{device_id},to_device_id.eq.{device_id})',
+                'order': 'created_at.desc',
+                'limit': '50'
+            }
+        )
+        return jsonify(response.json() if response.ok else [])
+
+    except Exception as e:
+        print(f"VoiceDay get nags error: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/voiceday/nags/<nag_id>/acknowledge', methods=['POST', 'OPTIONS'])
+def voiceday_acknowledge_nag(nag_id):
+    """Mark a nag as acknowledged"""
+    if request.method == 'OPTIONS':
+        return '', 204
+
+    try:
+        from datetime import datetime
+
+        response = requests.patch(
+            f"{SUPABASE_REST_URL}/voiceday_nags",
+            headers={
+                'apikey': SUPABASE_KEY,
+                'Authorization': f'Bearer {SUPABASE_KEY}',
+                'Content-Type': 'application/json',
+                'Prefer': 'return=representation'
+            },
+            params={'id': f'eq.{nag_id}'},
+            json={'acknowledged_at': datetime.utcnow().isoformat()}
+        )
+
+        if response.ok:
+            return jsonify({'success': True})
+        return jsonify({'error': 'Failed to acknowledge nag'}), 500
+
+    except Exception as e:
+        print(f"VoiceDay acknowledge error: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/voiceday/lookup-user', methods=['GET', 'OPTIONS'])
+def voiceday_lookup_user():
+    """Look up a user by phone number"""
+    if request.method == 'OPTIONS':
+        return '', 204
+
+    try:
+        phone = request.args.get('phone')
+        if not phone:
+            return jsonify({'error': 'phone required'}), 400
+
+        response = requests.get(
+            f"{SUPABASE_REST_URL}/voiceday_users",
+            headers={
+                'apikey': SUPABASE_KEY,
+                'Authorization': f'Bearer {SUPABASE_KEY}'
+            },
+            params={'phone': f'eq.{phone}'}
+        )
+
+        if response.ok and response.json():
+            user = response.json()[0]
+            return jsonify({
+                'found': True,
+                'has_app': True,
+                'name': user.get('name', 'Unknown'),
+                'device_id': user.get('device_id')
+            })
+        else:
+            return jsonify({
+                'found': False,
+                'has_app': False
+            })
+
+    except Exception as e:
+        print(f"VoiceDay lookup error: {e}")
+        return jsonify({'error': str(e)}), 500
+
 
 @app.route('/health', methods=['GET'])
 def health():
@@ -614,14 +1303,22 @@ def health():
 def index():
     return jsonify({
         'service': 'BigOil.net API',
-        'version': '1.0.0',
+        'version': '1.2.0',
         'endpoints': [
             '/api/job-descriptions',
             '/api/transcripts',
             '/api/interview-reports',
             '/api/analyze-transcripts',
             '/api/extract-email',
-            '/api/parse-linkedin-pdf'
+            '/api/parse-linkedin-pdf',
+            '/api/analyze-resume-fraud',
+            '/api/analyze-candidate-fit',
+            '/api/voiceday/register',
+            '/api/voiceday/connections',
+            '/api/voiceday/shared-tasks',
+            '/api/voiceday/nag',
+            '/api/voiceday/nags',
+            '/api/voiceday/lookup-user'
         ]
     })
 
