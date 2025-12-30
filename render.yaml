@@ -17,3 +17,9 @@ services:
         sync: false
       - key: HUNTER_API_KEY
         sync: false
+      - key: GMAIL_USER
+        sync: false
+      - key: GMAIL_APP_PASSWORD
+        sync: false
+      - key: CONTACT_RECIPIENT
+        sync: false

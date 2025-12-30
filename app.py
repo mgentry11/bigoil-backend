@@ -1294,6 +1294,110 @@ def voiceday_lookup_user():
         return jsonify({'error': str(e)}), 500
 
 
+# =============================================
+# CONTACT FORM EMAIL API (Gmail SMTP)
+# =============================================
+
+GMAIL_USER = os.getenv('GMAIL_USER', '')  # e.g., your-email@gmail.com
+GMAIL_APP_PASSWORD = os.getenv('GMAIL_APP_PASSWORD', '')  # Gmail App Password
+CONTACT_RECIPIENT = os.getenv('CONTACT_RECIPIENT', GMAIL_USER)  # Where to send contact form emails
+
+
+@app.route('/api/contact', methods=['POST', 'OPTIONS'])
+def send_contact_email():
+    """Send contact form email via Gmail SMTP"""
+    if request.method == 'OPTIONS':
+        return '', 204
+
+    try:
+        data = request.get_json()
+        name = data.get('name', '').strip()
+        email = data.get('email', '').strip()
+        inquiry_type = data.get('inquiry_type', 'General')
+        message = data.get('message', '').strip()
+
+        # Validation
+        if not name or not email or not message:
+            return jsonify({'error': 'Name, email, and message are required'}), 400
+
+        # Check if Gmail is configured
+        if not GMAIL_USER or not GMAIL_APP_PASSWORD:
+            print("Gmail not configured - GMAIL_USER and GMAIL_APP_PASSWORD required")
+            return jsonify({'error': 'Email service not configured'}), 500
+
+        # Build email
+        import smtplib
+        from email.mime.text import MIMEText
+        from email.mime.multipart import MIMEMultipart
+
+        msg = MIMEMultipart('alternative')
+        msg['Subject'] = f'[BigOil.net Contact] {inquiry_type} from {name}'
+        msg['From'] = GMAIL_USER
+        msg['To'] = CONTACT_RECIPIENT
+        msg['Reply-To'] = email
+
+        # Plain text version
+        text_body = f"""New contact form submission from BigOil.net
+
+Name: {name}
+Email: {email}
+Inquiry Type: {inquiry_type}
+
+Message:
+{message}
+
+---
+This email was sent from the contact form at bigoil.net
+"""
+
+        # HTML version
+        html_body = f"""
+<html>
+<body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
+    <h2 style="color: #1a1a2e; border-bottom: 2px solid #3b82f6; padding-bottom: 10px;">
+        New Contact Form Submission
+    </h2>
+    <table style="margin: 20px 0;">
+        <tr>
+            <td style="padding: 8px 0; font-weight: bold; width: 120px;">Name:</td>
+            <td style="padding: 8px 0;">{name}</td>
+        </tr>
+        <tr>
+            <td style="padding: 8px 0; font-weight: bold;">Email:</td>
+            <td style="padding: 8px 0;"><a href="mailto:{email}">{email}</a></td>
+        </tr>
+        <tr>
+            <td style="padding: 8px 0; font-weight: bold;">Inquiry Type:</td>
+            <td style="padding: 8px 0;">{inquiry_type}</td>
+        </tr>
+    </table>
+    <h3 style="color: #1a1a2e;">Message:</h3>
+    <div style="background: #f5f5f5; padding: 15px; border-radius: 5px; white-space: pre-wrap;">{message}</div>
+    <hr style="margin-top: 30px; border: none; border-top: 1px solid #ddd;">
+    <p style="color: #888; font-size: 12px;">This email was sent from the contact form at bigoil.net</p>
+</body>
+</html>
+"""
+
+        msg.attach(MIMEText(text_body, 'plain'))
+        msg.attach(MIMEText(html_body, 'html'))
+
+        # Send via Gmail SMTP
+        with smtplib.SMTP_SSL('smtp.gmail.com', 465) as server:
+            server.login(GMAIL_USER, GMAIL_APP_PASSWORD)
+            server.sendmail(GMAIL_USER, CONTACT_RECIPIENT, msg.as_string())
+
+        print(f"Contact email sent successfully from {name} ({email})")
+        return jsonify({'success': True, 'message': 'Email sent successfully'})
+
+    except smtplib.SMTPAuthenticationError as e:
+        print(f"Gmail authentication error: {e}")
+        return jsonify({'error': 'Email authentication failed. Check Gmail credentials.'}), 500
+    except Exception as e:
+        print(f"Contact email error: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
 @app.route('/health', methods=['GET'])
 def health():
     return jsonify({'status': 'ok', 'service': 'bigoil-backend'})
@@ -1339,7 +1443,8 @@ def index():
             '/api/voiceday/shared-tasks',
             '/api/voiceday/nag',
             '/api/voiceday/nags',
-            '/api/voiceday/lookup-user'
+            '/api/voiceday/lookup-user',
+            '/api/contact'
         ]
     })
 
